@@ -1,0 +1,68 @@
+---
+title: "Assignment - SQL and R"
+Author: "Peter Phung"
+---
+
+## Introduction
+In this assignment, a group of friends and family of the author were asked to rate 5 recent movies on a scale from 1 to 5, with 1 being one of the worst to 5 being one of the best. A Google form was sent out and 30 people had responded to the form. Their responses were then stored onto a .csv file. The data from this .csv file was then uploaded onto a MySQL database server. The data from the MySQL database server was then imported into R. Average imputation was then used in order to assign numerical values to NA responses (where the person who was surveyed had not seen the film, and thus, unable to give a score).
+
+## MySQL Importing of Movie Survey Data
+The data was then imported and stored onto a MySQL database. Instead of going through the trouble of having to store the .csv file onto your local machine then importing it into the MySQL server, and to account for reproducibility, The *Convert CSV to SQL*[1] online tool was used to convert the data from the .csv file into SQL code, because typing in 30 `INSERT INTO` statements by hand is not fun. The MySQL code to generate the table, `movie_survey`, containing the movie survey data is shown below.
+
+![*Figure 1: MySQL Code used to generate movie survey data.*](/home/peter/Pictures/Screenshot from 2021-09-05 19-57-07.png)
+
+## Importing of Movie Survey Data from MySQL to R.
+
+On MySQL Workbench, a new user was added who has permission to connect to the
+database. The credentials for this new user, which include the username and password for this user, were then stored on a configuration file (`movie_survey.cnf`). These credentials were stored on a configuration file for security reasons.
+In R, the location of the configuration file was used in order to connect to the MySQL database using the `dbConnect` function.
+
+```{r MySQL connecting to database}
+library(RMariaDB)
+library(knitr)
+
+rmariadb.settingsfile <- "/home/peter/Downloads/movie_survey.cnf"
+
+rmariadb.db <- "movie_survey"
+movie_survey_db <- dbConnect(RMariaDB::MariaDB(),
+                             default.file=rmariadb.settingsfile,
+                             group=rmariadb.db)
+
+dbListTables(movie_survey_db)
+```
+
+The `dbListTables` function shows the `movie_survey` table that was generated in MySQL using the movie survey data. The `movie_survey` table was then imported into R as a data frame and stored in the `movie_survey_df` variable.
+
+```{r Importing table and storing as dataframe}
+query<-paste(
+"SELECT * FROM movie_survey;",sep=""
+)
+
+rs = dbSendQuery(movie_survey_db, query)
+movie_survey_df <- dbFetch(rs)
+kable(movie_survey_df)
+```
+
+## Handling Missing Values
+
+In the data, there are several instances of NA values. These values indicate that the person that was being surveyed had not seen the film. In order to fill in these values with some numerical value, it was decided to compute the average value for each column, then fill in the NA values with this average for each column.
+
+```{r}
+apply(movie_survey_df, 2, mean, na.rm=TRUE)
+```
+
+The code block above shows the averages for each of the columns. The code block below applies all of these averages to each of the NA values for each column.
+
+```{r Missing values}
+for(i in 1:ncol(movie_survey_df)){
+  movie_survey_df[is.na(movie_survey_df[,i]), i] <- mean(movie_survey_df[,i], na.rm = TRUE)
+}
+kable(movie_survey_df)
+```
+
+## Conclusions
+A future experiment would be to reconduct the survey, but add an additional question to the survey, which asks for those that did not see the movie in question, what would be the likelihood that you would see the movie in the future. The scale that would be set for this question would also be from 1 to 5, with 1 being "Very Unlikely" and 5 being "Very Likely". We could have also standardized the ratings for each of the films, as the occasional low rating given by a user would impact the average rating for that movie. Calculating the median would probably benefit, also subtracting the mean and dividing by the standard deviation would normalize the ratings.
+
+## References
+
+[1] Convert CSV to SQL. CSV To SQL Converter. (n.d.). https://www.convertcsv.com/csv-to-sql.htm. 
